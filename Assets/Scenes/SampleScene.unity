@@ -436,6 +436,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 136877096903737240, guid: 11aaea5348574644a9eb4f4504fcce3f, type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -497,7 +501,7 @@ MonoBehaviour:
   blinkHeight: 42
   safeDistance: 0.001
   blinkCooldown: 1
-  gizmoColor: {r: 0, g: 1, b: 1, a: 0.25}
+  gizmoColor: {r: 0.9607843, g: 0.9647059, b: 0.95686275, a: 0}
   fixedHorizontalPos: {x: 0, y: 0}
 --- !u!114 &1353119625
 MonoBehaviour:
@@ -511,11 +515,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ab364bb147e0952498c7fe1e5806aa06, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  recordDuration: 5
-  recordInterval: 0.5
-  recordKey: 118
-  playbackSpeed: 1
-  playbackKey: 98
 --- !u!114 &1353119626
 MonoBehaviour:
   m_ObjectHideFlags: 0
