@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using UnityEngine;
+using System.Collections;
 
 public class FirstPersonAudio : MonoBehaviour
 {
@@ -28,6 +29,15 @@ public class FirstPersonAudio : MonoBehaviour
     public Crouch crouch;
     public AudioSource crouchStartAudio, crouchedAudio, crouchEndAudio;
     public AudioClip[] crouchStartSFX, crouchEndSFX;
+    
+    [Header("BGM & Breathing")]
+    public AudioSource bgmAudio;
+    public AudioClip[] bgmClips;
+
+    public AudioSource breathingAudio;
+    public AudioClip[] breathingClips;
+    public float breathingDuration = 3f; // 喘息持续时间
+
 
     AudioSource[] MovingAudios => new AudioSource[] { stepAudio, runningAudio, crouchedAudio };
 
@@ -56,8 +66,46 @@ public class FirstPersonAudio : MonoBehaviour
             crouchStartAudio = GetOrCreateAudioSource("Crouched Audio");
             crouchStartAudio = GetOrCreateAudioSource("Crouch End Audio");
         }
+        
+        // Setup BGM & Breathing
+        bgmAudio = GetOrCreateAudioSource("BGM Audio");
+        breathingAudio = GetOrCreateAudioSource("Breathing Audio");
     }
 
+    void Start()
+    {
+        // 播放喘息声
+        if (breathingClips != null && breathingClips.Length > 0)
+        {
+            PlayRandomClip(breathingAudio, breathingClips);
+        }
+
+        // 延迟播放背景音乐
+        if (bgmClips != null && bgmClips.Length > 0)
+        {
+            Invoke(nameof(PlayBGM), breathingDuration);
+        }
+    }
+    IEnumerator FadeInBGM()
+    {
+        breathingAudio.volume = 0;
+        breathingAudio.Play();
+        while (breathingAudio.volume < 1f)
+        {
+            breathingAudio.volume += Time.deltaTime / 2f; // 2秒淡入
+            yield return null;
+        }
+    }
+
+    
+    void PlayBGM()
+    {
+        // 随机挑一首BGM
+        AudioClip clip = bgmClips[Random.Range(0, bgmClips.Length)];
+        bgmAudio.clip = clip;
+        bgmAudio.loop = true;
+        bgmAudio.Play();
+    }
     void OnEnable() => SubscribeToEvents();
 
     void OnDisable() => UnsubscribeToEvents();
