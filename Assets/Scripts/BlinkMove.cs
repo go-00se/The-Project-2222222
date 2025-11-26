@@ -21,7 +21,7 @@ private CapsuleCollider capsule;
 private bool movedUp = false;
 private bool canBlink = true;      // 是否可以顺移
 private float cooldownTimer = 0f;  // 冷却计时器
-public Vector2 fixedHorizontalPos = new Vector2(5.6f, 2.02f); //固定水平位置
+public Vector2 fixedHorizontalPos; //固定水平位置
 
 void Start()
 {
@@ -110,4 +110,12 @@ void DrawCapsuleGizmo(Vector3 top, Vector3 bottom, float radius)
     Gizmos.DrawLine(top + Vector3.right * radius, bottom + Vector3.right * radius);
     Gizmos.DrawLine(top - Vector3.right * radius, bottom - Vector3.right * radius);
 }
+
+public void SetCheckpoint(Vector3 checkpointPos)
+{
+    fixedHorizontalPos = new Vector2(checkpointPos.x, checkpointPos.z);
 }
+}
+
+
+
