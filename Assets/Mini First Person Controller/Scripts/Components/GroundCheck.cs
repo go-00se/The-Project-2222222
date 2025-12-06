@@ -13,7 +13,7 @@ public class GroundCheck : MonoBehaviour
     /// </summary>
     public event System.Action Grounded;
 
-    const float OriginOffset = .001f;
+    const float OriginOffset = .01f;
     Vector3 RaycastOrigin => transform.position + Vector3.up * OriginOffset;
     float RaycastDistance => distanceThreshold + OriginOffset;
 
@@ -29,6 +29,9 @@ public class GroundCheck : MonoBehaviour
             Grounded?.Invoke();
         }
 
+        // 每帧输出当前状态（可根据需要启用/禁用）
+        Debug.Log("Is Grounded: " + isGroundedNow);
+        
         // Update isGrounded.
         isGrounded = isGroundedNow;
     }
