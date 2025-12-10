@@ -3,47 +3,81 @@ using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(FirstPersonMovement))]
-public class RigidbodyPathRecorder : MonoBehaviour
+public class ActionReplay_Final : MonoBehaviour
 {
-    [Header("Recording Settings")] public float recordDuration = 5f; // 最大录制时长
-    public float recordInterval = 0.05f; // 每隔多久记录一次
+    [Header("录制设置")]
+    public float recordDuration = 5f;
+    public float recordInterval = 0.05f;
     public KeyCode recordKey = KeyCode.C;
 
-    [Header("Playback Settings")] public float playbackSpeed = 1f; // 回放速度倍率
+    [Header("回放设置")]
+    public float playbackSpeed = 1f;
     public KeyCode playbackKey = KeyCode.V;
+
+    [Header("路径显示")]
+    public float previewHeightOffset = 0.5f;  
+    public Color previewStartColor = new Color(0, 1, 1, 0.8f);
+    public Color previewEndColor = new Color(0, 1, 1, 0.2f);
+    public float previewWidth = 0.06f;
 
     private Rigidbody rb;
     private FirstPersonMovement moveScript;
-    private bool isRecording = false;
-    private bool isPlayingBack = false;
 
+    // 录制状态
+    private bool isRecording = false;
     private float recordTimer = 0f;
     private float recordIntervalTimer = 0f;
 
-    // 存储相对位移而不是绝对位置
+    // 回放状态
+    private bool isPlayingBack = false;
+    private int playbackIndex = 0;
+    private float playbackTimer = 0f;
+
+    // 数据存储
     private List<Vector3> recordedDisplacements = new List<Vector3>();
     private List<Quaternion> recordedRotations = new List<Quaternion>();
     private Vector3 recordingStartPosition;
     private Quaternion recordingStartRotation;
 
-    private int playbackIndex = 0;
-    private float playbackTimer = 0f;
+    // 回放起点（绝对坐标）
     private Vector3 playbackStartPosition;
     private Quaternion playbackStartRotation;
+
+    // 路径显示
+    private LineRenderer previewLine;
+    private int previewCutIndex = 0;
+    private Vector3[] playbackWorldPositions; // 回放期间锁定的绝对坐标
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
         moveScript = GetComponent<FirstPersonMovement>();
+
+        // 初始化 LineRenderer
+        previewLine = gameObject.AddComponent<LineRenderer>();
+        previewLine.material = new Material(Shader.Find("Sprites/Default"));
+        previewLine.widthMultiplier = previewWidth;
+        previewLine.startColor = previewStartColor;
+        previewLine.endColor = previewEndColor;
+        previewLine.positionCount = 0;
     }
 
     void Update()
     {
-        // ========= 录制 =========
+        HandleRecording();
+        HandlePlayback();
+    }
+
+    void LateUpdate()
+    {
+        UpdatePreviewPath();
+    }
+
+    #region 录制
+    void HandleRecording()
+    {
         if (Input.GetKeyDown(recordKey))
-        {
             StartRecording();
-        }
 
         if (isRecording)
         {
@@ -57,39 +91,20 @@ public class RigidbodyPathRecorder : MonoBehaviour
             }
 
             if (recordTimer >= recordDuration || Input.GetKeyUp(recordKey))
-            {
                 StopRecording();
-            }
-        }
-
-        // ========= 回放 =========
-        if (Input.GetKeyDown(playbackKey) && recordedDisplacements.Count > 1)
-        {
-            StartPlayback();
-        }
-
-        if (isPlayingBack)
-        {
-            PlaybackFrame();
-
-            if (Input.GetKeyUp(playbackKey))
-            {
-                StopPlayback();
-            }
         }
     }
 
-    // ----------- 录制 -----------
     void StartRecording()
     {
         isRecording = true;
         isPlayingBack = false;
         recordTimer = 0f;
         recordIntervalTimer = 0f;
+
         recordedDisplacements.Clear();
         recordedRotations.Clear();
 
-        // 记录开始位置和旋转
         recordingStartPosition = transform.position;
         recordingStartRotation = transform.rotation;
 
@@ -98,39 +113,66 @@ public class RigidbodyPathRecorder : MonoBehaviour
 
     void RecordFrame()
     {
-        // 存储相对于开始位置的位移
-        recordedDisplacements.Add(transform.position - recordingStartPosition);
-        recordedRotations.Add(transform.rotation);
+        // 本地位移和旋转
+        Vector3 worldDelta = transform.position - recordingStartPosition;
+        Vector3 localDelta = Quaternion.Inverse(recordingStartRotation) * worldDelta;
+        recordedDisplacements.Add(localDelta);
+
+        Quaternion localRot = Quaternion.Inverse(recordingStartRotation) * transform.rotation;
+        recordedRotations.Add(localRot);
     }
 
     void StopRecording()
     {
         isRecording = false;
+        previewCutIndex = 0;
+        UpdatePreviewPath();
+
         Debug.Log($"<color=yellow>录制结束，共 {recordedDisplacements.Count} 个点。</color>");
     }
+    #endregion
 
-    // ----------- 回放 -----------
+    #region 回放
+    void HandlePlayback()
+    {
+        if (Input.GetKeyDown(playbackKey) && recordedDisplacements.Count > 1)
+            StartPlayback();
+
+        if (isPlayingBack)
+        {
+            PlaybackFrame();
+
+            if (Input.GetKeyUp(playbackKey))
+                StopPlayback();
+        }
+    }
+
     void StartPlayback()
     {
-        if (recordedDisplacements.Count < 2)
-        {
-            Debug.LogWarning("没有录制到有效路径，无法回放！");
-            return;
-        }
-
         isPlayingBack = true;
         playbackIndex = 0;
         playbackTimer = 0f;
 
-        // 记录回放开始的位置和旋转
-        playbackStartPosition = transform.position;
-        playbackStartRotation = transform.rotation;
+        playbackStartPosition = transform.position;  // 锁定回放起点
+        playbackStartRotation = transform.rotation;  // 锁定回放朝向
 
-        moveScript.enabled = false; // 禁用原始移动控制
+        moveScript.enabled = false;
         rb.velocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
 
-        Debug.Log("<color=cyan>开始路径回放...</color>");
+        // 生成绝对坐标的路径用于回放期间显示
+        playbackWorldPositions = new Vector3[recordedDisplacements.Count];
+        for (int i = 0; i < recordedDisplacements.Count; i++)
+        {
+            Vector3 worldPos = playbackStartPosition + playbackStartRotation * recordedDisplacements[i];
+            worldPos.y += previewHeightOffset; // 高度偏移
+            playbackWorldPositions[i] = worldPos;
+        }
+
+        previewCutIndex = 0; // 从头开始吃掉路径
+        UpdatePreviewPath();
+
+        Debug.Log("<color=cyan>开始回放路径（绝对坐标）...</color>");
     }
 
     void PlaybackFrame()
@@ -142,9 +184,8 @@ public class RigidbodyPathRecorder : MonoBehaviour
         }
 
         playbackTimer += Time.deltaTime * playbackSpeed;
-
-        // 计算当前应该在哪个片段
         float segmentDuration = recordInterval / playbackSpeed;
+
         while (playbackTimer >= segmentDuration && playbackIndex < recordedDisplacements.Count - 1)
         {
             playbackTimer -= segmentDuration;
@@ -157,53 +198,85 @@ public class RigidbodyPathRecorder : MonoBehaviour
             return;
         }
 
-        // 计算当前片段内的插值比例
-        float t = playbackTimer / segmentDuration;
-        t = Mathf.Clamp01(t);
-
-        // 获取当前片段的位移和旋转
+        // 插值
+        float t = Mathf.Clamp01(playbackTimer / segmentDuration);
         Vector3 currentDisplacement = recordedDisplacements[playbackIndex];
         Vector3 nextDisplacement = recordedDisplacements[playbackIndex + 1];
         Quaternion currentRotation = recordedRotations[playbackIndex];
         Quaternion nextRotation = recordedRotations[playbackIndex + 1];
 
-        // 计算目标位置和旋转
         Vector3 targetDisplacement = Vector3.Lerp(currentDisplacement, nextDisplacement, t);
         Quaternion targetRotation = Quaternion.Slerp(currentRotation, nextRotation, t);
 
-        // 应用位移和旋转（从回放起点开始）
-        Vector3 targetPosition = playbackStartPosition + targetDisplacement;
+        Vector3 worldOffset = playbackStartRotation * targetDisplacement;
+        Vector3 targetPosition = playbackStartPosition + worldOffset;
 
-        // 用物理方式移动（保留碰撞）
         rb.MovePosition(targetPosition);
-        rb.MoveRotation(targetRotation);
+        rb.MoveRotation(playbackStartRotation * targetRotation);
+
+        // 更新路径裁剪
+        previewCutIndex = playbackIndex;
     }
 
     void StopPlayback()
     {
         if (isPlayingBack)
-            Debug.Log("<color=magenta>路径回放结束。</color>");
+            Debug.Log("<color=magenta>回放结束</color>");
 
         isPlayingBack = false;
-        moveScript.enabled = true; // 恢复玩家控制
-    }
+        moveScript.enabled = true;
 
-    // 可视化路径
-    void OnDrawGizmos()
+        previewCutIndex = 0;
+        UpdatePreviewPath();
+    }
+    #endregion
+
+    #region 路径可视化
+    void UpdatePreviewPath()
     {
-        if (recordedDisplacements == null || recordedDisplacements.Count < 2) return;
-
-        Gizmos.color = Color.yellow;
-
-        // 计算当前场景中的路径位置
-        Vector3 basePosition = Application.isPlaying
-            ? (isPlayingBack ? playbackStartPosition : recordingStartPosition)
-            : transform.position;
-
-        for (int i = 0; i < recordedDisplacements.Count - 1; i++)
+        if (recordedDisplacements.Count < 2)
         {
-            Vector3 worldPos1 = basePosition + recordedDisplacements[i];
-            Vector3 worldPos2 = basePosition + recordedDisplacements[i + 1];
+            previewLine.positionCount = 0;
+            return;
         }
+
+        Vector3[] displayPositions;
+        if (isPlayingBack && playbackWorldPositions != null)
+        {
+            // 回放期间使用绝对坐标路径
+            int remainingPoints = playbackWorldPositions.Length - previewCutIndex;
+            if (remainingPoints <= 1)
+            {
+                previewLine.positionCount = 0;
+                return;
+            }
+
+            displayPositions = new Vector3[remainingPoints];
+            for (int i = 0; i < remainingPoints; i++)
+                displayPositions[i] = playbackWorldPositions[previewCutIndex + i];
+        }
+        else
+        {
+            // 平时预览随玩家朝向旋转
+            int remainingPoints = recordedDisplacements.Count - previewCutIndex;
+            if (remainingPoints <= 1)
+            {
+                previewLine.positionCount = 0;
+                return;
+            }
+
+            displayPositions = new Vector3[remainingPoints];
+            for (int i = 0; i < remainingPoints; i++)
+            {
+                Vector3 worldOffset = transform.rotation * recordedDisplacements[previewCutIndex + i];
+                Vector3 worldPos = transform.position + worldOffset;
+                worldPos.y += previewHeightOffset;
+                displayPositions[i] = worldPos;
+            }
+        }
+
+        previewLine.positionCount = displayPositions.Length;
+        previewLine.SetPositions(displayPositions);
     }
+    #endregion
 }
